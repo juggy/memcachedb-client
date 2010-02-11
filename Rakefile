@@ -6,11 +6,11 @@ require 'rake/testtask'
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |s|
-    s.name = "memcache-client"
-    s.summary = s.description = "A Ruby library for accessing memcached."
-    s.email = "mperham@gmail.com"
-    s.homepage = "http://github.com/mperham/memcache-client"
-    s.authors = ['Eric Hodel', 'Robert Cottrell', 'Mike Perham']
+    s.name = "memcachedb-client"
+    s.summary = s.description = "A Ruby library for accessing memcachedb."
+    s.email = "julien.guimont@gmail.com"
+    s.homepage = "http://github.com/juggy/memcache-client"
+    s.authors = ['Eric Hodel', 'Robert Cottrell', 'Mike Perham', 'Julien Guimont']
     s.has_rdoc = true
     s.files = FileList["[A-Z]*", "{lib,test}/**/*", 'performance.txt']
     s.test_files = FileList["test/test_*.rb"]

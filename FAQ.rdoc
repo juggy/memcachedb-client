@@ -1,6 +1,6 @@
 = Memcache-client FAQ
 
-== Does memcache-client work with Ruby 1.9?
+== Does memcachedb-client work with Ruby 1.9?
 
 Yes, Ruby 1.9 is supported.  The test suite should pass completely on 1.8.6 and 1.9.1.
 

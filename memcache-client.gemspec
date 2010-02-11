@@ -4,14 +4,14 @@
 # -*- encoding: utf-8 -*-
 
 Gem::Specification.new do |s|
-  s.name = %q{memcache-client}
-  s.version = "1.7.8"
+  s.name = %q{memcachedb-client}
+  s.version = "0.0.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["Eric Hodel", "Robert Cottrell", "Mike Perham"]
-  s.date = %q{2010-02-03}
-  s.description = %q{A Ruby library for accessing memcached.}
-  s.email = %q{mperham@gmail.com}
+  s.authors = ["Eric Hodel", "Robert Cottrell", "Mike Perham, Julien Guimont"]
+  s.date = %q{2010-02-10}
+  s.description = %q{A Ruby library for accessing memcachedb.}
+  s.email = %q{julien.guimont@gmail.com}
   s.extra_rdoc_files = [
     "LICENSE.txt",
      "README.rdoc"
@@ -25,16 +25,15 @@ Gem::Specification.new do |s|
      "VERSION.yml",
      "lib/continuum_native.rb",
      "lib/memcache.rb",
-     "lib/memcache_util.rb",
      "performance.txt",
      "test/test_benchmark.rb",
      "test/test_mem_cache.rb"
   ]
-  s.homepage = %q{http://github.com/mperham/memcache-client}
+  s.homepage = %q{http://github.com/juggy/memcache-client}
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
   s.rubygems_version = %q{1.3.5}
-  s.summary = %q{A Ruby library for accessing memcached.}
+  s.summary = %q{A Ruby library for accessing memcachedb.}
   s.test_files = [
     "test/test_benchmark.rb",
      "test/test_mem_cache.rb"
