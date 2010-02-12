@@ -214,10 +214,11 @@ class MemCacheDb
 
   def groups=(groups)
     @groups = Array(groups).collect do |group|
+      p group
       case group
       when Hash
         servers = create_servers(group[:servers])
-        Group.new(servers, group[:weight])
+        Group.new(self, servers, group[:weight])
       else
         servers
       end
@@ -706,7 +707,7 @@ class MemCacheDb
     raise ArgumentError, "illegal character in key #{key.inspect}" if
       key =~ /\s/
     raise ArgumentError, "key too long #{key.inspect}" if key.length > 250
-    raise MemCacheDbError, "No servers available" if @servers.empty?
+    raise MemCacheDbError, "No servers available" if @groups.empty?
     return @groups.first if @groups.length == 1
 
     hkey = hash_for(key)
@@ -1000,7 +1001,7 @@ class MemCacheDb
             #check if able to write
             command = "set CLIENT_TEST_MASTER 0 0 1\r\n0\r\n"
 
-            with_socket_management(server) do |socket|
+            @memcache.with_socket_management(s) do |socket|
               socket.write command
               result = socket.gets
               if result == "STORED\r\n"
@@ -1014,6 +1015,7 @@ class MemCacheDb
         end
         #masters can also be used to read
         @slaves << @master
+        p "Using master #{@master.host}:#{@master.port}"
         @logger.info "Using master #{@master}" if @logger
         @logger.info "Using slaves #{@slaves}" if @logger
       end

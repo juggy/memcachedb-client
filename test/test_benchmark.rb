@@ -7,19 +7,19 @@ require 'rubygems'
 require 'test/unit'
 
 $TESTING = true
-require 'memcache' if not defined?(MemCache)
+require 'memcachedb' if not defined?(MemCacheDb)
 
 class TestBenchmark < Test::Unit::TestCase
 
   def setup
-    puts "Testing #{MemCache::VERSION}"
+    puts "Testing #{MemCacheDb::VERSION}"
     # We'll use a simple @value to try to avoid spending time in Marshal,
     # which is a constant penalty that both clients have to pay
     @value = []
     @marshalled = Marshal.dump(@value)
 
     @opts = [
-      ['127.0.0.1:11211', 'localhost:11211'],
+      [{:servers=>['127.0.0.1:11211', '127.0.0.1:11212']}],
       {
         :namespace => "namespace",
 #        :no_reply => true,
@@ -41,7 +41,7 @@ class TestBenchmark < Test::Unit::TestCase
       n = 2500
 #      n = 1000
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("set:plain:memcache-client") do
         n.times do
           @m.set @key1, @marshalled, 0, true
@@ -53,7 +53,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("set:ruby:memcache-client") do
         n.times do
           @m.set @key1, @value
@@ -65,7 +65,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("get:plain:memcache-client") do
         n.times do
           @m.get @key1, true
@@ -77,7 +77,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("get:ruby:memcache-client") do
         n.times do
           @m.get @key1
@@ -89,7 +89,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("multiget:ruby:memcache-client") do
         n.times do
           # We don't use the keys array because splat is slow
@@ -97,7 +97,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("missing:ruby:memcache-client") do
         n.times do
           begin @m.delete @key1; rescue; end
@@ -109,7 +109,7 @@ class TestBenchmark < Test::Unit::TestCase
         end
       end
 
-      @m = MemCache.new(*@opts)
+      @m = MemCacheDb.new(*@opts)
       x.report("mixed:ruby:memcache-client") do
         n.times do
           @m.set @key1, @value

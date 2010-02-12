@@ -13,9 +13,9 @@ end
 Thread.abort_on_exception = true
 $TESTING = true
 
-require File.dirname(__FILE__) + '/../lib/memcache' if not defined?(MemCache)
+require File.dirname(__FILE__) + '/../lib/memcachedb' if not defined?(MemCacheDb)
 
-class MemCache
+class MemCacheDb
 
   attr_writer :namespace
   attr_writer :autofix_keys
@@ -114,13 +114,13 @@ end
 class TestMemCache < Test::Unit::TestCase
 
   def setup
-    @cache = MemCache.new 'localhost:1', :namespace => 'my_namespace'
+    @cache = MemCacheDb.new 'localhost:1', :namespace => 'my_namespace'
   end
 
   def test_performance
     requirement(memcached_running?, 'A real memcached server must be running for performance testing') do
 
-      cache = MemCache.new(['localhost:11211',"127.0.0.1:11211"])
+      cache = MemCacheDb.new({:servers=>['localhost:11211',"127.0.0.1:11211"]})
       cache.flush_all
       cache.add('a', 1, 120)
       with = xprofile 'get' do
@@ -131,7 +131,7 @@ class TestMemCache < Test::Unit::TestCase
       puts ''
       puts "1000 gets with socket timeout: #{with} sec"
 
-      cache = MemCache.new(['localhost:11211',"127.0.0.1:11211"], :timeout => nil)
+      cache = MemCacheDb.new({:servers=>['localhost:11211',"127.0.0.1:11211"]}, :timeout => nil)
       cache.add('a', 1, 120)
       without = xprofile 'get' do
         1000.times do
@@ -145,7 +145,7 @@ class TestMemCache < Test::Unit::TestCase
   def test_consistent_hashing
     requirement(self.respond_to?(:flexmock), 'Flexmock is required to run this test') do
 
-      flexmock(MemCache::Server).new_instances.should_receive(:alive?).and_return(true)
+      flexmock(MemCacheDb::Server).new_instances.should_receive(:alive?).and_return(true)
 
       # Setup a continuum of two servers
       @cache.servers = ['mike1', 'mike2', 'mike3']
@@ -170,7 +170,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_get_multi_with_server_failure
-    @cache = MemCache.new 'localhost:1', :namespace => 'my_namespace', :logger => nil #Logger.new(STDOUT)
+    @cache = MemCacheDb.new 'localhost:1', :namespace => 'my_namespace', :logger => nil #Logger.new(STDOUT)
     s1 = FakeServer.new
     s2 = FakeServer.new
 
@@ -192,7 +192,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_cache_get_with_failover
-    @cache = MemCache.new 'localhost:1', :namespace => 'my_namespace', :logger => nil#Logger.new(STDOUT)
+    @cache = MemCacheDb.new 'localhost:1', :namespace => 'my_namespace', :logger => nil#Logger.new(STDOUT)
     s1 = FakeServer.new
     s2 = FakeServer.new
 
@@ -226,7 +226,7 @@ class TestMemCache < Test::Unit::TestCase
 
     assert s1.alive?
     assert s2.alive?
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get('foo')
     end
     assert s1.alive?
@@ -337,7 +337,7 @@ class TestMemCache < Test::Unit::TestCase
     server = FakeServer.new
     server.multithread = false
 
-    @cache = MemCache.new(['localhost:1'], :multithread => false)
+    @cache = MemCacheDb.new(['localhost:1'], :multithread => false)
 
     server.socket.data.write "bogus response\r\nbogus response\r\n"
     server.socket.data.rewind
@@ -354,7 +354,7 @@ class TestMemCache < Test::Unit::TestCase
       begin
         @cache.set 'b', 2
         passed = false
-      rescue MemCache::MemCacheError => me
+      rescue MemCacheDb::MemCacheDbError => me
         passed = me.message =~ /multiple threads/
       end
     end
@@ -362,7 +362,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_initialize
-    cache = MemCache.new :namespace => 'my_namespace', :readonly => true
+    cache = MemCacheDb.new :namespace => 'my_namespace', :readonly => true
 
     assert_equal 'my_namespace', cache.namespace
     assert_equal true, cache.readonly?
@@ -370,7 +370,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_initialize_compatible
-    cache = MemCache.new ['localhost:11211', 'localhost:11212'],
+    cache = MemCacheDb.new ['localhost:11211', 'localhost:11212'],
             :namespace => 'my_namespace', :readonly => true
 
     assert_equal 'my_namespace', cache.namespace
@@ -379,7 +379,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_initialize_compatible_no_hash
-    cache = MemCache.new ['localhost:11211', 'localhost:11212']
+    cache = MemCacheDb.new ['localhost:11211', 'localhost:11212']
 
     assert_equal nil, cache.namespace
     assert_equal false, cache.readonly?
@@ -387,7 +387,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_initialize_compatible_one_server
-    cache = MemCache.new 'localhost:11211'
+    cache = MemCacheDb.new 'localhost:11211'
 
     assert_equal nil, cache.namespace
     assert_equal false, cache.readonly?
@@ -396,14 +396,14 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_initialize_compatible_bad_arg
     e = assert_raise ArgumentError do
-      cache = MemCache.new Object.new
+      cache = MemCacheDb.new Object.new
     end
 
     assert_equal 'first argument must be Array, Hash or String', e.message
   end
 
   def test_initialize_multiple_servers
-    cache = MemCache.new %w[localhost:11211 localhost:11212],
+    cache = MemCacheDb.new %w[localhost:11211 localhost:11212],
                          :namespace => 'my_namespace', :readonly => true
 
     assert_equal 'my_namespace', cache.namespace
@@ -414,7 +414,7 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_initialize_too_many_args
     assert_raises ArgumentError do
-      MemCache.new 1, 2, 3
+      MemCacheDb.new 1, 2, 3
     end
   end
 
@@ -536,7 +536,7 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers = []
     @cache.servers << server
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get 'my_namespace:key'
     end
 
@@ -551,7 +551,7 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers = []
     @cache.servers << server
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get 'my_namespace:key'
     end
 
@@ -560,7 +560,7 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_get_no_connection
     @cache.servers = 'localhost:1'
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get 'key'
     end
 
@@ -569,7 +569,7 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_get_no_servers
     @cache.servers = []
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get 'key'
     end
 
@@ -641,7 +641,7 @@ class TestMemCache < Test::Unit::TestCase
   def test_get_server_for_key_no_servers
     @cache.servers = []
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.get_server_for_key 'key'
     end
 
@@ -806,9 +806,9 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_set_readonly
-    cache = MemCache.new :readonly => true
+    cache = MemCacheDb.new :readonly => true
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       cache.set 'key', 'value'
     end
 
@@ -816,7 +816,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_check_size_on
-    cache = MemCache.new :check_size => true
+    cache = MemCacheDb.new :check_size => true
 
     server = FakeServer.new
     server.socket.data.write "STORED\r\n"
@@ -825,7 +825,7 @@ class TestMemCache < Test::Unit::TestCase
     cache.servers = []
     cache.servers << server
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       cache.set 'key', 'v' * 1048577
     end
 
@@ -833,7 +833,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_check_size_off
-    cache = MemCache.new :check_size => false
+    cache = MemCacheDb.new :check_size => false
 
     server = FakeServer.new
     server.socket.data.write "STORED\r\n"
@@ -857,7 +857,7 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers = []
     @cache.servers << server
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       @cache.set 'key', 'v'
     end
 
@@ -977,9 +977,9 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_add_readonly
-    cache = MemCache.new :readonly => true
+    cache = MemCacheDb.new :readonly => true
 
-    e = assert_raise MemCache::MemCacheError do
+    e = assert_raise MemCacheDb::MemCacheDbError do
       cache.add 'key', 'value'
     end
 
@@ -1044,7 +1044,7 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers = []
     @cache.servers << server
 
-    assert_raise MemCache::MemCacheError do
+    assert_raise MemCacheDb::MemCacheDbError do
       @cache.flush_all
     end
 
@@ -1053,7 +1053,7 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_flush_all_for_real
     requirement(memcached_running?, 'A real memcached server must be running for testing flush_all') do
-      cache = MemCache.new "localhost:11211", :namespace => "test_flush_all"
+      cache = MemCacheDb.new "localhost:11211", :namespace => "test_flush_all"
       k, v = "1234", "test"
       assert_nil cache.get(k)
       cache.set(k, v)
@@ -1086,7 +1086,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_basic_threaded_operations_should_work
-    cache = MemCache.new :multithread => true,
+    cache = MemCacheDb.new :multithread => true,
                          :namespace => 'my_namespace',
                          :readonly => false
 
@@ -1109,7 +1109,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_namespace_separator
-    cache = MemCache.new :namespace => 'ns', :namespace_separator => ''
+    cache = MemCacheDb.new :namespace => 'ns', :namespace_separator => ''
 
     server = FakeServer.new
     server.socket.data.write "STORED\r\n"
@@ -1128,7 +1128,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def test_basic_unthreaded_operations_should_work
-    cache = MemCache.new :multithread => false,
+    cache = MemCacheDb.new :multithread => false,
                          :namespace => 'my_namespace',
                          :readonly => false
 
@@ -1164,7 +1164,7 @@ class TestMemCache < Test::Unit::TestCase
   end
 
   def util_setup_server(memcache, host, responses)
-    server = MemCache::Server.new memcache, host
+    server = MemCacheDb::Server.new memcache, host
     server.instance_variable_set :@sock, StringIO.new(responses)
 
     @cache.servers = []
@@ -1177,7 +1177,7 @@ class TestMemCache < Test::Unit::TestCase
     requirement(memcached_running?, 'A real memcached server must be running for performance testing') do
 
       # Use a null logger to verify logging doesn't blow up at runtime
-      cache = MemCache.new(['localhost:11211', '127.0.0.1:11211'], :logger => Logger.new('/dev/null'))
+      cache = MemCacheDb.new(['localhost:11211', '127.0.0.1:11211'], :logger => Logger.new('/dev/null'))
       cache.flush_all
       workers = []
 
