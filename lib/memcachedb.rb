@@ -146,7 +146,7 @@ class MemCacheDb
   # Other options are ignored.
 
   def initialize(*args)
-    servers = []
+    groups = []
     opts = {}
 
     case args.length
@@ -154,7 +154,7 @@ class MemCacheDb
     when 1 then
       arg = args.shift
       case arg
-      when Hash   then opts = arg
+      when Hash   then groups << arg
       when Array  then groups = arg
       else raise ArgumentError, 'first argument must be Array, Hash'
       end
@@ -177,10 +177,9 @@ class MemCacheDb
     @namespace_separator = opts[:namespace_separator]
     @mutex        = Mutex.new if @multithread
 
-    logger.info { "MemCacheDb-client #{VERSION} #{Array(servers).inspect}" } if logger
+    logger.info { "MemCacheDb-client #{VERSION} #{Array(groups).inspect}" } if logger
 
     Thread.current[:memcachedb_client] = self.object_id if !@multithread
-
     self.groups = groups
   end
 
@@ -214,13 +213,12 @@ class MemCacheDb
 
   def groups=(groups)
     @groups = Array(groups).collect do |group|
-      p group
       case group
       when Hash
         servers = create_servers(group[:servers])
-        Group.new(self, servers, group[:weight])
+        Group.new(self, servers, group[:name], group[:weight])
       else
-        servers
+        group
       end
     end
     @continuum = create_continuum_for(@groups) if @groups.size > 1
@@ -326,7 +324,6 @@ class MemCacheDb
     end
 
     results = {}
-
     server_keys.each do |server, keys_for_server|
       keys_for_server_str = keys_for_server.join ' '
       begin
@@ -545,40 +542,7 @@ class MemCacheDb
     end
   end
 
-  ##
-  # Flush the cache from all MemCacheDb servers.
-  # A non-zero value for +delay+ will ensure that the flush
-  # is propogated slowly through your MemCacheDbd server farm.
-  # The Nth server will be flushed N*delay seconds from now,
-  # asynchronously so this method returns quickly.
-  # This prevents a huge database spike due to a total
-  # flush all at once.
 
-  def flush_all(delay=0)
-    raise MemCacheDbError, 'No active servers' unless active?
-    raise MemCacheDbError, "Update of readonly cache" if @readonly
-
-    begin
-      delay_time = 0
-      @servers.each do |server|
-        with_socket_management(server) do |socket|
-          logger.debug { "flush_all #{delay_time} on #{server}" } if logger
-          if delay == 0 # older versions of MemCacheDbd will fail silently otherwise
-            socket.write "flush_all#{noreply}\r\n"
-          else
-            socket.write "flush_all #{delay_time}#{noreply}\r\n"
-          end
-          break nil if @no_reply
-          result = socket.gets
-          raise_on_error_response! result
-          result
-        end
-        delay_time += delay
-      end
-    rescue IndexError => err
-      handle_error nil, err
-    end
-  end
 
   ##
   # Returns statistics for each MemCacheDbd server.  An explanation of the
@@ -772,7 +736,7 @@ class MemCacheDb
       result = with_socket_management(server) do |socket|
         socket.write "gets #{cache_key}\r\n"
         keyline = socket.gets # "VALUE <key> <flags> <bytes> <cas token>\r\n"
-
+        
         if keyline.nil? then
           server.close
           raise MemCacheDbError, "lost connection to #{server.host}:#{server.port}"
@@ -805,7 +769,7 @@ class MemCacheDb
     with_socket_management(server) do |socket|
       values = {}
       socket.write "get #{cache_keys}\r\n"
-
+      
       while keyline = socket.gets do
         return values if keyline == "END\r\n"
         raise_on_error_response! keyline
@@ -856,13 +820,11 @@ class MemCacheDb
 
   def with_socket_management(server, &block)
     check_multithread_status!
-
     @mutex.lock if @multithread
     retried = false
 
     begin
       socket = server.socket
-
       # Raise an IndexError to show this server is out of whack. If were inside
       # a with_server block, we'll catch it and attempt to restart the operation.
 
@@ -871,6 +833,7 @@ class MemCacheDb
       block.call(socket)
 
     rescue SocketError, Errno::EAGAIN, Timeout::Error => err
+      
       logger.warn { "Socket failure: #{err.message}" } if logger
       server.mark_dead(err)
       handle_error(server, err)
@@ -934,13 +897,13 @@ class MemCacheDb
     end
   end
 
-  def create_continuum_for_groups(groups)
+  def create_continuum_for(groups)
     total_weight = groups.inject(0) { |memo, gr| memo + gr.weight }
     continuum = []
 
     groups.each do |group|
-      entry_count_for(group, group.size, total_weight).times do |idx|
-        hash = Digest::SHA1.hexdigest("#{server.host}:#{server.port}:#{idx}")
+      entry_count_for(group, groups.size, total_weight).times do |idx|
+        hash = Digest::SHA1.hexdigest("#{group.name}:#{idx}")
         value = Integer("0x#{hash[0..7]}")
         continuum << Continuum::Entry.new(value, group)
       end
@@ -969,15 +932,16 @@ class MemCacheDb
   class Group
       attr_reader :weight
       attr_reader :servers
+      attr_reader :name
       
-      def initialize(memcache, servers, weight)
+      def initialize(memcache, servers, name, weight)
         @memcache = memcache
         @logger = memcache.logger
         @servers = servers
         @slaves = []
-        @weight = weight
+        @weight = weight || DEFAULT_WEIGHT
         @roundrobin = 0
-        
+        @name = name || 'default'
         determine_master
       end
       
@@ -991,6 +955,11 @@ class MemCacheDb
         server = @slaves[@roundrobin]
         server = next_slave unless server.alive?
         server
+      end
+      
+      
+      def alive?
+        master.alive?
       end
       
      protected 
@@ -1007,14 +976,14 @@ class MemCacheDb
               if result == "STORED\r\n"
                 #this is the master
                 @master = s
-              else
-                @slaves << s
+                break
               end
             end
           end
         end
         #masters can also be used to read
-        @slaves << @master
+        @slaves = @servers
+        raise MemCacheDbError.new 'No Master Server found' if @master.nil?
         p "Using master #{@master.host}:#{@master.port}"
         @logger.info "Using master #{@master}" if @logger
         @logger.info "Using slaves #{@slaves}" if @logger
