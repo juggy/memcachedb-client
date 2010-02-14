@@ -1,3 +1,50 @@
+= memcachedb-client
+
+A ruby library for accessing memcachedb: http://memcachedb.org/
+
+Source:
+http://github.com/juggy/memcachedb-client
+
+To install the gem
+
+== Using memcachedb-client
+
+With a single server:
+	
+	CACHE = MemCacheDb.new :servers=>'localhost:11211'
+	
+With multiple master servers
+	
+	CACHE = MemCacheDb.new [{:servers=>'host1:11211', :name=>'host1'}, {:servers=>'host2:11211', :name=>'host2'}]
+	
+With a single master-slave configuration
+
+	CACHE = MemCacheDb.new :servers=>['localhost:11211', 'localhost:11212']
+	
+With multiple master-slave configuration
+	
+	CACHE = MemCacheDb.new [{:servers=>['host1:11211', 'host1:11212'], :name=>'host1'}, {:servers=>['host2:11211', 'host2:11212'], :name=>'host2'}]
+
+	* The master will be determined automatically
+	
+== Starting memcachedb as a master-slave configuration
+
+	memcachedb -p11211 -r -H ./memcache1 -N -R 127.0.0.1:21211 -O 127.0.0.1:31211 
+	
+	-p11211 : the memcache port the server will listen to
+	-R 127.0.0.1:21211 : the port the replication server will listen to for this instance
+	-O 127.0.0.1:31211 : each other replication server in the master-slave group
+	-The master will be elected once all servers are started. 
+	
+== Questions on memcachedb-client ?
+
+	- julien.guimont@gmail.com
+	
+	
+===========================
+memcache-client Documentation
+
+
 = memcache-client
 
 A ruby library for accessing memcached.
