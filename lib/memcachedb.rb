@@ -630,6 +630,51 @@ class MemCacheDb
   def []=(key, value)
     set key, value
   end
+  
+  
+  ##
+  # Gets or creates a socket connected to the given server, and yields it
+  # to the block, wrapped in a mutex synchronization if @multithread is true.
+  #
+  # If a socket error (SocketError, SystemCallError, IOError) or protocol error
+  # (MemCacheDbError) is raised by the block, closes the socket, attempts to
+  # connect again, and retries the block (once).  If an error is again raised,
+  # reraises it as MemCacheDbError.
+  #
+  # If unable to connect to the server (or if in the reconnect wait period),
+  # raises MemCacheDbError.  Note that the socket connect code marks a server
+  # dead for a timeout period, so retrying does not apply to connection attempt
+  # failures (but does still apply to unexpectedly lost connections etc.).
+
+  def with_socket_management(server, &block)
+    check_multithread_status!
+    @mutex.lock if @multithread
+    retried = false
+
+    begin
+      socket = server.socket
+      # Raise an IndexError to show this server is out of whack. If were inside
+      # a with_server block, we'll catch it and attempt to restart the operation.
+
+      raise IndexError, "No connection to server (#{server.status})" if socket.nil?
+
+      block.call(socket)
+
+    rescue SocketError, Errno::EAGAIN, Timeout::Error => err
+      
+      logger.warn { "Socket failure: #{err.message}" } if logger
+      server.mark_dead(err)
+      handle_error(server, err)
+
+    rescue MemCacheDbError, SystemCallError, IOError => err
+      logger.warn { "Generic failure: #{err.class.name}: #{err.message}" } if logger
+      handle_error(server, err) if retried || socket.nil?
+      retried = true
+      retry
+    end
+  ensure
+    @mutex.unlock if @multithread
+  end
 
   protected unless $TESTING
 
@@ -802,50 +847,6 @@ class MemCacheDb
       return nil if text == "NOT_FOUND\r\n"
       return text.to_i
     end
-  end
-
-  ##
-  # Gets or creates a socket connected to the given server, and yields it
-  # to the block, wrapped in a mutex synchronization if @multithread is true.
-  #
-  # If a socket error (SocketError, SystemCallError, IOError) or protocol error
-  # (MemCacheDbError) is raised by the block, closes the socket, attempts to
-  # connect again, and retries the block (once).  If an error is again raised,
-  # reraises it as MemCacheDbError.
-  #
-  # If unable to connect to the server (or if in the reconnect wait period),
-  # raises MemCacheDbError.  Note that the socket connect code marks a server
-  # dead for a timeout period, so retrying does not apply to connection attempt
-  # failures (but does still apply to unexpectedly lost connections etc.).
-
-  def with_socket_management(server, &block)
-    check_multithread_status!
-    @mutex.lock if @multithread
-    retried = false
-
-    begin
-      socket = server.socket
-      # Raise an IndexError to show this server is out of whack. If were inside
-      # a with_server block, we'll catch it and attempt to restart the operation.
-
-      raise IndexError, "No connection to server (#{server.status})" if socket.nil?
-
-      block.call(socket)
-
-    rescue SocketError, Errno::EAGAIN, Timeout::Error => err
-      
-      logger.warn { "Socket failure: #{err.message}" } if logger
-      server.mark_dead(err)
-      handle_error(server, err)
-
-    rescue MemCacheDbError, SystemCallError, IOError => err
-      logger.warn { "Generic failure: #{err.class.name}: #{err.message}" } if logger
-      handle_error(server, err) if retried || socket.nil?
-      retried = true
-      retry
-    end
-  ensure
-    @mutex.unlock if @multithread
   end
 
   def with_server(key, read = false)
